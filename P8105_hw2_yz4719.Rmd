@@ -1,0 +1,249 @@
+---
+title: "P8105_hw2_yz4719"
+author: "Yuxin Zhang"
+date: "2023-10-03"
+output: github_document
+---
+
+```{r libraries, message = FALSE}
+library(tidyverse)
+library(readxl)
+```
+
+## Problem 1: FiveThirtyEight data
+
+```{r clean_538_pols}
+# replace month number with month name
+month_df = 
+  tibble(
+    month_num = 1:12,
+    month_abb = month.abb,
+    month = month.name
+  )
+
+# clean the data in pols-month.csv
+pols = 
+  read_csv("data/fivethirtyeight_datasets/pols-month.csv") |>
+  # Use separate() to break up the variable mon into integer variables year, month, and day
+  separate(mon, into = c("year", "month_num", "day"), convert = TRUE) |>
+  # create a president variable taking values gop and dem
+  mutate(
+    president = recode(prez_gop, "0" = "dem", "1" = "gop", "2" = "gop")) |>
+  #  remove prez_dem and prez_gop; and remove the day variable
+  left_join(x = _, y = month_df) |> 
+  select(year, month, everything(), -day, -starts_with("prez")) 
+```
+
+
+```{r clean_538_snp}
+snp = 
+  read_csv(
+    "data/fivethirtyeight_datasets/snp.csv",
+    col_types = cols(date = col_date(format = "%m/%d/%y"))) |>
+  separate(date, into = c("year", "month_num", "day"), convert = TRUE) |>
+  mutate(
+    year = if_else(year > 2023, year - 100, year)) |> 
+  left_join(x = _, y = month_df) |> 
+  select(year, month, close) 
+```
+
+```{r clean_538_unemp}
+unemployment = 
+  read_csv("data/fivethirtyeight_datasets/unemployment.csv") |>
+  rename(year = Year) |>
+  pivot_longer(
+    Jan:Dec, 
+    names_to = "month_abb",
+    values_to = "unemployment"
+  ) |> 
+  left_join(x = _, y = month_df) |> 
+  select(year, month, unemployment)
+```
+
+
+```{r merge_538}
+data_538 = 
+  left_join(pols, snp) |>
+  left_join(x = _, y = unemployment)
+
+str(data_538)
+```
+
+### Description of datasets
+
+The `pols` data has `r nrow(pols)` observations and `r ncol(pols)` variables and tells us about the party affiliation distribution (democrat or republican) for governors and senators for a given year from years `r pols |> pull(year) |> min()` to `r pols |> pull(year) |> max()`. It also tells us whether the sitting president was a democrat or republican. The `snp` data has `r nrow(snp)` observations and `r ncol(snp)` variables, ranging from years `r snp |> pull(year) |> min()` to `r snp |> pull(year) |> max()`. The `unemployment` data has `r nrow(unemployment)` observations and `r ncol(unemployment)` variables ranging from years `r unemployment |> pull(year) |> min()` to `r unemployment |> pull(year) |> max()`. In Januarys in or after 1975 in which a democrat was president, the **average unemployment rate was `r filter(data_538, month == "January", year >= 1975, president == "dem") |> pull(unemployment) |> mean() |> round(2)`**.  The average unemployment rate over the same time period in which a republican was president was `r filter(data_538, month == "January", year >= 1975, president == "gop") |> pull(unemployment) |> mean() |> round(2)`.
+
+
+## Problem 2
+
+```{r load clean and organize mr trashwheel data}
+
+mr_trash_wheel_df = 
+   read_excel("data/Trash Wheel Collection Data.xlsx", sheet = "Mr. Trash Wheel", range = "A2:N586")|>
+  janitor::clean_names()|>
+  mutate(
+    date = substr(date, nchar(date) - 1, nchar(date)))|>
+  mutate(
+    homes_powered = (weight_tons*500/30))|>
+  mutate(trash_wheel_name = "Mr_trash_wheel")
+mr_trash_wheel_df
+```
+
+```{r load clean and organize professor trashwheel data}
+professor_trash_wheel_df = 
+  read_excel("data/Trash Wheel Collection Data.xlsx", sheet = "Professor Trash Wheel", range = "A2:M108")|>
+  janitor::clean_names()|>
+  mutate(
+    date = substr(date, nchar(date) - 1, nchar(date)))|>
+  mutate(
+    homes_powered = (weight_tons*500/30), 
+    year = as.character(year))|>
+  mutate(trash_wheel_name = "Professor_trash_wheel")
+professor_trash_wheel_df
+```
+
+```{r load clean and organize gwynnda trashwheel data}
+gwynnda_trash_wheel_df = 
+  read_excel("data/Trash Wheel Collection Data.xlsx", sheet = "Gwynnda Trash Wheel", range = "A2:L157")|>
+  janitor::clean_names()|>
+  mutate(
+    date = substr(date, nchar(date) - 1, nchar(date))
+  )|>
+  mutate(
+    homes_powered = (weight_tons*500/30),
+    year = as.character(year)
+  )|>
+  mutate(trash_wheel_name = "Gwynnda_trash_wheel")
+gwynnda_trash_wheel_df
+```
+
+```{r trash wheel combind}
+trash_wheel_combind_df=
+  bind_rows(mr_trash_wheel_df,professor_trash_wheel_df,gwynnda_trash_wheel_df) |>
+  janitor::clean_names()
+
+trash_wheel_combind_df
+```
+
+### Description of datasets
+
+Dataset `mr_trash_wheel_df` contains `r nrow(mr_trash_wheel_df)` observations and `r ncol(mr_trash_wheel_df)` variables including `r colnames(mr_trash_wheel_df)`.
+
+Dataset `professor_trash_wheel_df` contains `r nrow(professor_trash_wheel_df)` observations and `r ncol(professor_trash_wheel_df)` variables including `r colnames(professor_trash_wheel_df)`.
+
+Dataset `gwynnda_trash_wheel_df` contains `r nrow(gwynnda_trash_wheel_df)` observations and `r ncol(gwynnda_trash_wheel_df)` variables including `r colnames(gwynnda_trash_wheel_df)`.
+
+**key variables **
+In the combind of all three trash wheels, all the data came from a range of date inbetween year `r range(trash_wheel_combind_df$year)`, and have a average "weight_tons" of `r mean(trash_wheel_combind_df$weight_tons)` and standard deviation `r sd(trash_wheel_combind_df$weight_tons)`. they also have a average "volume_cubic_yards" of `r mean(trash_wheel_combind_df$volume_cubic_yards)` and standard deviation `r sd(trash_wheel_combind_df$volume_cubic_yards)`.
+
+  
+The total weight of trash collected by Professor Trash Wheel is `r sum(professor_trash_wheel_df$weight_tons)` tons.
+
+The total number of cigarette butts collected by Gwynnda in July of 2021 is `r sum(subset(gwynnda_trash_wheel_df, month == "July" & year == "2021" )$cigarette_butts)`.
+
+## Problem 3
+
+```{r baseline}
+mci_baseline_unfilter = 
+  read_csv("data/data_mci/MCI_baseline.csv", skip=1) |> 
+  janitor::clean_names() |>
+  mutate(
+    sex =
+      case_match(
+        sex,
+        1 ~ "male",
+        0 ~ "female"),
+    sex = as.factor(sex),
+    apoe4 = 
+      case_match(
+        apoe4,
+        1 ~ "carrier",
+        0 ~ "noncarrier"),
+    apoe4 = as.factor(apoe4)
+      )
+
+mci_baseline = 
+  read_csv("data/data_mci/MCI_baseline.csv", skip=1) |> 
+  janitor::clean_names() |>
+  mutate(
+    sex =
+      case_match(
+        sex,
+        1 ~ "male",
+        0 ~ "female"),
+    sex = as.factor(sex),
+    apoe4 = 
+      case_match(
+        apoe4,
+        1 ~ "carrier",
+        0 ~ "noncarrier"),
+    apoe4 = as.factor(apoe4)
+      )|>
+  filter((current_age < age_at_onset | age_at_onset == ".")) 
+    
+view(mci_baseline)
+
+```
+
+### Description of the data
+
+Importing and cleaned the data, then converted sex and apoe4 these 2 variables into meaningful characters.Then remove any participants who do not meet the stated inclusion criteria.
+
+This study recruited `r nrow(mci_baseline_unfilter)` participants， and have `r ncol(mci_baseline)` variables focus on age, sex, years of education, APOE4 gene carrier or not, and age at the onset.
+
+There are `r sum(pull(mci_baseline, age_at_onset) != ".")` participants developed MCI. 
+
+The average baseline age was `r mean(pull(mci_baseline, current_age)) |> round(2)`. 
+
+The proportion of women in the study who are apoe4 carriers is `r mci_baseline |> filter(sex == "female", apoe4 == "carrier") |> nrow()/sum(pull(mci_baseline, sex) == "female") * 100`%.
+
+
+```{r amyloid}
+mci_amyloid = 
+  read_csv("data/data_mci/mci_amyloid.csv", skip=1) |> 
+  janitor::clean_names() |> 
+rename("id" = "study_id" )
+  
+mci_amyloid_pivot= mci_amyloid|>
+  pivot_longer(
+    baseline:time_8, 
+    names_to = "time",
+    values_to = "value"
+   ) |>
+    arrange(time,id) 
+  
+view(mci_amyloid)
+```
+After read the dataset, then use pivot_longer to switch to the long format. The variable `study_id` was renamed to match the mci_baseline dataset.
+
+Dataset "mci_amyloid" has `r ncol(mci_amyloid)` variables: `r colnames(mci_amyloid)` 
+
+```{r}
+mci_combined =
+  inner_join(mci_baseline, mci_amyloid, by = "id")
+
+only_baseline =
+  anti_join(mci_baseline, mci_combined, by = "id")
+
+only_amyloid =
+  anti_join(mci_amyloid, mci_combined, by = "id")
+
+mci_combined_pivot =
+  inner_join(mci_baseline, mci_amyloid_pivot, by = "id")
+```
+
+Here are some participants who only appear in the baseline data but not in the amyloid data, and their id is: `r pull(only_baseline, id)`. Here are some participants who only appear in the amyloid data but not in the  baseline data, and their id is `r pull(only_amyloid, id)`. 
+
+
+```{r combine_mci}
+mci_combined =
+  inner_join(mci_baseline, mci_amyloid, by = "id")
+
+view(mci_combined)
+
+write_csv(mci_combined, "mci_combined.csv")
+```
+Using the inner join function  to join the baseline and amyloid datasets together, so that only participants who appear in both datasets are retained.
+
+The combined dataset has `r nrow(mci_combined)` rows and `r ncol(mci_combined_pivot)` columns, so there are 
+
